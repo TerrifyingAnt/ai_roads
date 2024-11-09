@@ -60,7 +60,7 @@ logging.info(f"Граф создан: {round(end_time - start_time, 2)}")
 # houses_with_routes - датафрейм, который был получен ранее после выполнения assign_routes_to_all_houses
 # G - граф, созданный через create_graph
 
-popular_routes = process_routes(houses, metro, stations, filtered_poi, path_graph)
+popular_routes = process_routes(houses, path_graph)
 
 # Выводим наиболее популярные маршруты и количество людей, которые их используют
 for route, count in popular_routes:

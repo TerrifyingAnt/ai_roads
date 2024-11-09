@@ -8,7 +8,11 @@ import matplotlib.pyplot as plt
 import logging
 from collections import defaultdict
 import heapq
+import warnings
 import progressbar
+import networkx as nx
+
+warnings.simplefilter(action='ignore')
 
 
 files = {
@@ -55,7 +59,7 @@ def create_graph(houses: gpd.GeoDataFrame, filtered_poi: gpd.GeoDataFrame, pois:
         nearest_point, nearest_distance = _find_nearest_node(house_center, tree, node_coords)
         
         # Добавляем центр дома в граф
-        G.add_node((house_center.x, house_center.y), type='house')
+        G.add_node((house_center.x, house_center.y), type="house")
 
         # Добавляем ребро между домом и ближайшей точкой на улице
         G.add_edge((house_center.x, house_center.y), nearest_point, weight=nearest_distance)
@@ -75,7 +79,7 @@ def create_graph(houses: gpd.GeoDataFrame, filtered_poi: gpd.GeoDataFrame, pois:
         nearest_point, nearest_distance = _find_nearest_node(filtered_poi_center, tree, node_coords)
         
         # Добавляем центр дома в граф
-        G.add_node((filtered_poi_center.x, filtered_poi_center.y), type='poi_house')
+        G.add_node((filtered_poi_center.x, filtered_poi_center.y), type='poi_house_' + str(house["Type"]) + "_" + str(house["Purpose"]))
 
         # Добавляем ребро между домом и ближайшей точкой на улице
         G.add_edge((filtered_poi_center.x, filtered_poi_center.y), nearest_point, weight=nearest_distance)
@@ -100,7 +104,8 @@ def _find_nearest_node(house_center, tree, node_coords):
 
 # Генерация позиций узлов
 def find_shortest_path(start_place: gpd.GeoDataFrame, end_place: gpd.GeoDataFrame, G: nx.Graph) -> list[tuple]:
-    pos = {node: (node[0], node[1]) for node in G.nodes}
+    # pos = {node: (node[0], node[1]) for node in G.nodes}
+
     start_node = start_place.geometry.centroid
     end_node = end_place.geometry.centroid
     # Создаем список ребер маршрута
@@ -109,91 +114,104 @@ def find_shortest_path(start_place: gpd.GeoDataFrame, end_place: gpd.GeoDataFram
     shortest_path = nx.shortest_path(G, source=start_node, target=end_node, weight='weight')
     return [(shortest_path[i], shortest_path[i + 1]) for i in range(len(shortest_path) - 1)]
 
-
 # Функция для обработки всех маршрутов и подсчета популярных путей
-def process_routes(houses, metro, stations, filtered_poi, G):
-    with progressbar.ProgressBar(max_value=len(houses)) as bar:
+def process_routes(houses, G):
         # Словарь для хранения путей и их популярности
-        route_popularity = defaultdict(int)
-        # Словарь для хранения путей
-        all_paths = []
+    route_popularity = defaultdict(int)
+        # Список для хранения всех маршрутов
+    all_paths = []
 
         # Проходим по всем домам и получаем маршруты
+    with progressbar.ProgressBar(max_value=len(houses) + 1) as bar:
+        bar.update(0)
         for idx, house in houses.iterrows():
             assigned_routes = house['Assigned_Routes']  # Список маршрутов для текущего дома
-            
-            for route in assigned_routes:
-                print(route)
-                # Определяем начальную точку (дом) и конечную точку (место назначения)
-                end_place = find_by_name(house, route, metro, stations, filtered_poi)
-                start_place = house #gpd.GeoDataFrame(geometry=[Point(house['centroid'].x, house['centroid'].y)])
 
-                print("end_place", end_place)
+            # Определяем начальную точку (дом) как объект Point
+            start_point = Point(house['centroid'].x, house['centroid'].y)
 
-                end_place = end_place#gpd.GeoDataFrame(geometry=[Point(end_place.geometry.centroid.x, end_place.geometry.centroid.y)], crs=houses.crs)
-                
-                # Получаем путь для этого маршрута
-                path_edges = find_shortest_path(start_place, end_place, G)
-                
-                # Конвертируем путь в кортеж для дальнейшего подсчета популярности
-                path_tuple = tuple(path_edges)
-                
-                # Увеличиваем счетчик популярности для этого пути
-                route_popularity[path_tuple] += 1
-                all_paths.append(path_tuple)
+            # Обработка каждого маршрута и количества людей
+            for route_data in assigned_routes:
+                route_name = route_data['Маршрут']      # Название маршрута
+                print(route_name)
+                people_count = route_data['Количество_людей']  # Количество людей, использующих этот маршрут
+
+                try:
+                    # Находим кратчайший путь до ближайшей точки интереса по маршруту
+                    path_edges = find_shortest_path_to_poi(G, start_point, route_name)
+
+                    # Конвертируем путь в кортеж для подсчета популярности
+                    path_tuple = tuple(path_edges)
+
+                    # Увеличиваем счетчик популярности для этого пути на количество людей
+                    route_popularity[path_tuple] += people_count
+                    all_paths.append((path_tuple, people_count))
+                    
+                except ValueError as e:
+                    # Обрабатываем случаи, когда маршрут не найден
+                    print(f"Маршрут не найден для дома {idx} с маршрутом {route_name}: {e}")
+                    
             bar.update(idx)
 
-        # Получаем наиболее популярные пути
-        popular_routes = heapq.nlargest(10, route_popularity.items(), key=lambda x: x[1])
+    # Получаем 10 самых популярных маршрутов
+    popular_routes = heapq.nlargest(10, route_popularity.items(), key=lambda x: x[1])
 
-        # Формируем результаты
-        popular_routes_with_count = [(route, count) for route, count in popular_routes]
+    # Формируем результаты
+    popular_routes_with_count = [(route, count) for route, count in popular_routes]
     
     return popular_routes_with_count
 
 
-def find_by_name(house: gpd.GeoDataFrame, route: tuple[str], metro: gpd.GeoDataFrame, stations: gpd.GeoDataFrame, houses: gpd.GeoDataFrame):
-    # Вычисляем центроид для дома, если он еще не рассчитан
-    house_centroid = house.geometry.centroid
+# Обновленная функция для поиска кратчайшего пути до точки интереса
+def find_shortest_path_to_poi(graph: nx.Graph, start_point: Point, route_name: str) -> list[tuple]:
+    """
+    Находит кратчайший путь до ближайшей точки интереса по маршруту в графе.
+    
+    :param graph: Граф NetworkX, содержащий все дома и точки интереса с их типами и целями.
+    :param start_point: Точка отсчета (например, дом) в виде объекта Point.
+    :param route_name: Название маршрута, соответствующее точке интереса.
+    :return: Список кортежей, представляющих путь от стартовой точки до ближайшей точки интереса.
+    """
+    # Определяем координаты стартовой точки в графе
+    start_node = (start_point.x, start_point.y)
+    
+    # Проверка наличия стартовой точки в графе
+    if start_node not in graph:
+        raise ValueError("Стартовая точка не найдена в графе.")
+    temp_x = [data for node, data in graph.nodes(data=True)]
+    print(temp_x)
+    # Находим узлы графа, соответствующие заданному маршруту
+    target_nodes = [
+        node for node, data in graph.nodes(data=True)
+        if str(data.get('type')).find(route_name) != -1
+    ]
+    
+    # Проверка наличия подходящих точек
+    if not target_nodes:
+        raise ValueError(f"Нет точек интереса с маршрутом '{route_name}' в графе.")
 
-    if route is not None and len(route) == 1:
-        if route[0] == "Метро":
-            # Ищем ближайшую станцию метро
-            metro['distance'] = metro.geometry.centroid.distance(house_centroid)
-            if metro.empty:
-                return None
-            need_station = metro.loc[metro['distance'].idxmin()]
-            return need_station
-        elif route[0] == "Остановка":
-            # Ищем ближайшую станцию (не метро)
-            stations['distance'] = stations.geometry.centroid.distance(house_centroid)
-            if stations.empty:
-                return None
-            need_station = stations.loc[stations['distance'].idxmin()]
-            return need_station
-        else:
-            filtered_houses = houses[(houses["Purpose"] == route[1])]
-        
-        # Проверка на наличие данных в filtered_houses
-        if filtered_houses.empty:
-            return None
+    # Инициализация переменных для хранения ближайшей точки и кратчайшего пути
+    shortest_path = None
+    shortest_distance = float('inf')
 
-        # Если есть данные, ищем ближайший
-        filtered_houses['distance'] = filtered_houses.geometry.centroid.distance(house_centroid)
-        need_station = filtered_houses.loc[filtered_houses['distance'].idxmin()]
-        return need_station
-    else:
-        # Фильтруем здания по типу и назначению
-        filtered_houses = houses[(houses["Purpose"] == route[1])]
-        print(houses)
-        
-        # Проверка на наличие данных в filtered_houses
-        if filtered_houses.empty:
-            return None
-
-        # Если есть данные, ищем ближайший
-        filtered_houses['distance'] = filtered_houses.geometry.centroid.distance(house_centroid)
-        need_station = filtered_houses.loc[filtered_houses['distance'].idxmin()]
-        return need_station
-
+    # Поиск кратчайшего пути до ближайшей точки интереса
+    for target_node in target_nodes:
+        try:
+            # Находим путь и его длину от стартовой точки до текущей целевой точки
+            path = nx.shortest_path(graph, source=start_node, target=target_node, weight='weight')
+            path_length = nx.shortest_path_length(graph, source=start_node, target=target_node, weight='weight')
             
+            # Сравниваем длину пути с текущим кратчайшим путём
+            if path_length < shortest_distance:
+                shortest_path = path
+                shortest_distance = path_length
+        except nx.NetworkXNoPath:
+            # Если пути нет, пропускаем
+            continue
+    
+    if shortest_path is None:
+        raise ValueError("Кратчайший путь не найден.")
+    
+    # Возвращаем кратчайший путь
+    return [(shortest_path[i], shortest_path[i + 1]) for i in range(len(shortest_path) - 1)]
+ 

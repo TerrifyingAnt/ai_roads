@@ -156,14 +156,14 @@ def assign_routes_to_house(house, routes, mean=1, std_dev=0.2):
     - routes: доступные маршруты
     - mean, std_dev: параметры нормального распределения
     Возвращает:
-    - Словарь с маршрутом для каждого человека
+    - Список словарей с маршрутом и количеством людей, использующих этот маршрут
     """
     assigned_routes = []  # Список маршрутов для всех людей в доме
     
     # Получаем количество квартир и общее количество людей в доме
     total_people = house['Total_People']
     
-    # Распределение людей по категориям
+    # Определяем доли людей по категориям
     child_percent = 0.15  # 15% детей и пенсионеров
     adult_personal_transport_percent = 0.30  # 30% взрослых с личным транспортом
     adult_public_transport_percent = 0.45  # 45% взрослых с общественным транспортом
@@ -175,26 +175,35 @@ def assign_routes_to_house(house, routes, mean=1, std_dev=0.2):
     adults_public_transport_count = int(total_people * adult_public_transport_percent)
     adults_car_sharing_count = int(total_people * adult_car_sharing_percent)
     
+    # Вспомогательная функция для добавления маршрута с подсчетом
+    def add_route(route_name):
+        for route in assigned_routes:
+            if route['Маршрут'] == route_name:
+                route['Количество_людей'] += 1
+                return
+        # Если маршрут не найден, добавляем его как новый
+        assigned_routes.append({'Маршрут': route_name, 'Количество_людей': 1})
+
     # Генерация маршрутов для детей (маленькие дети идут в детский сад, а взрослые ведут их)
     for _ in range(children_and_seniors_count // 2):  # Каждого ребенка ведет взрослый
-        assigned_routes.append(generate_route('маленький ребенок', routes))
-        assigned_routes.append(generate_route('взрослый', routes))  # Взрослый ведет ребенка
+        add_route(generate_route('маленький ребенок', routes))
+        add_route(generate_route('взрослый', routes))  # Взрослый ведет ребенка
     
     # Генерация маршрутов для школьников
     for _ in range(children_and_seniors_count % 2):  # Остальные дети могут быть школьниками
-        assigned_routes.append(generate_route('школьник', routes))
+        add_route(generate_route('школьник', routes))
     
     # Генерация маршрутов для взрослых с личным транспортом
     for _ in range(adults_personal_transport_count):
-        assigned_routes.append(generate_route('взрослый', routes))
+        add_route(generate_route('взрослый', routes))
     
     # Генерация маршрутов для взрослых с общественным транспортом
     for _ in range(adults_public_transport_count):
-        assigned_routes.append(generate_route('взрослый', routes))
+        add_route(generate_route('взрослый', routes))
     
     # Генерация маршрутов для взрослых с каршерингом
     for _ in range(adults_car_sharing_count):
-        assigned_routes.append(generate_route('взрослый', routes))
+        add_route(generate_route('взрослый', routes))
     
     return assigned_routes
 
