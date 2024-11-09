@@ -16,7 +16,7 @@ files = {
 }
 start_time = time.time()
 
-def create_graph(houses: gpd.GeoDataFrame, pois: gpd.GeoDataFrame, streets: gpd.GeoDataFrame) -> nx.Graph:
+def create_graph(houses: gpd.GeoDataFrame, filtered_poi: gpd.GeoDataFrame, pois: gpd.GeoDataFrame, streets: gpd.GeoDataFrame) -> nx.Graph:
     # Загружаем дома, метро и улицы
     # houses = gpd.read_file(house_path).to_crs(epsg=4326)
     # metroes = gpd.read_file(metro_path).to_crs(epsg=4326)  # Станции метро
@@ -69,6 +69,16 @@ def create_graph(houses: gpd.GeoDataFrame, pois: gpd.GeoDataFrame, streets: gpd.
 
         # Добавляем ребро между домом и ближайшей точкой на улице
         G.add_edge((metro_coords.x, metro_coords.y), nearest_point, weight=nearest_distance)
+
+    for _, filtered_poi_1 in filtered_poi.iterrows():
+        filtered_poi_center = filtered_poi_1.geometry.centroid
+        nearest_point, nearest_distance = _find_nearest_node(filtered_poi_center, tree, node_coords)
+        
+        # Добавляем центр дома в граф
+        G.add_node((filtered_poi_center.x, filtered_poi_center.y), type='poi_house')
+
+        # Добавляем ребро между домом и ближайшей точкой на улице
+        G.add_edge((filtered_poi_center.x, filtered_poi_center.y), nearest_point, weight=nearest_distance)
         
     # Печать статистики
     logging.info(f"--> Граф содержит {len(G.nodes)} узлов и {len(G.edges)} ребер.")
@@ -94,8 +104,8 @@ def find_shortest_path(start_place: gpd.GeoDataFrame, end_place: gpd.GeoDataFram
     start_node = start_place.geometry.centroid
     end_node = end_place.geometry.centroid
     # Создаем список ребер маршрута
-    #start_node = (37.48997790288288, 55.553571725893136)
-    #end_node = (37.470826631165075, 55.5599388466005)
+    start_node = (start_node.x, start_node.y)
+    end_node = (end_node.x, end_node.y)
     shortest_path = nx.shortest_path(G, source=start_node, target=end_node, weight='weight')
     return [(shortest_path[i], shortest_path[i + 1]) for i in range(len(shortest_path) - 1)]
 
@@ -116,9 +126,11 @@ def process_routes(houses, metro, stations, filtered_poi, G):
                 print(route)
                 # Определяем начальную точку (дом) и конечную точку (место назначения)
                 end_place = find_by_name(house, route, metro, stations, filtered_poi)
-                start_place = gpd.GeoDataFrame(geometry=[Point(house['centroid'].x, house['centroid'].y)])
+                start_place = house #gpd.GeoDataFrame(geometry=[Point(house['centroid'].x, house['centroid'].y)])
 
-                end_place = gpd.GeoDataFrame(geometry=[Point(end_place['centroid'].x, end_place['centroid'].y)], crs=houses.crs)
+                print("end_place", end_place)
+
+                end_place = end_place#gpd.GeoDataFrame(geometry=[Point(end_place.geometry.centroid.x, end_place.geometry.centroid.y)], crs=houses.crs)
                 
                 # Получаем путь для этого маршрута
                 path_edges = find_shortest_path(start_place, end_place, G)
@@ -160,7 +172,7 @@ def find_by_name(house: gpd.GeoDataFrame, route: tuple[str], metro: gpd.GeoDataF
             need_station = stations.loc[stations['distance'].idxmin()]
             return need_station
         else:
-            filtered_houses = houses[(houses["Type"] == route[0])]
+            filtered_houses = houses[(houses["Purpose"] == route[1])]
         
         # Проверка на наличие данных в filtered_houses
         if filtered_houses.empty:
@@ -172,7 +184,7 @@ def find_by_name(house: gpd.GeoDataFrame, route: tuple[str], metro: gpd.GeoDataF
         return need_station
     else:
         # Фильтруем здания по типу и назначению
-        filtered_houses = houses[(houses["Type"] == route[0])]
+        filtered_houses = houses[(houses["Purpose"] == route[1])]
         print(houses)
         
         # Проверка на наличие данных в filtered_houses

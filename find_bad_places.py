@@ -20,13 +20,12 @@ stations = gpd.read_file(r"Векторные данные\Остановки_О
 end_time = time.time()
 logging.info(f"Загрузка завершена:  {round(end_time - start_time, 2)}")
 
-
 start_time = time.time()
 logging.info(f"Начало фильтрации данных")
 
 filtered_houses = filter_places(houses, PlaceType.home)
 filtered_poi = filter_places(houses, PlaceType.poi)
-print(filtered_poi)
+
 end_time = time.time()
 logging.info(f"Данные отфильтрованы: {round(end_time - start_time, 2)}")
 
@@ -51,7 +50,7 @@ logging.info(f"Данные дополнены: {round(end_time - start_time, 2)
 
 start_time = time.time()
 logging.info(f"Начало создания графа путей")
-path_graph = create_graph(houses, metro, streets)
+path_graph = create_graph(houses, filtered_poi, metro, streets)
 
 end_time = time.time()
 logging.info(f"Граф создан: {round(end_time - start_time, 2)}")
@@ -66,10 +65,3 @@ popular_routes = process_routes(houses, metro, stations, filtered_poi, path_grap
 # Выводим наиболее популярные маршруты и количество людей, которые их используют
 for route, count in popular_routes:
     logging.info(f"Маршрут: {route}, Число людей: {count}")
-
-
-
-
-
-
-

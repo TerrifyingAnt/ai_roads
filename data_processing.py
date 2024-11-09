@@ -44,16 +44,17 @@ def filter_places(geo_data: gpd.GeoDataFrame, place_type: PlaceType) ->  gpd.Geo
     if place_type == PlaceType.home:
         types = geo_data[geo_data["Type"].isin(home_type)]
         purposes = geo_data[geo_data["Purpose"].isin(home_purpose)]
+        logging.info(f"--> Поиск жилых домов")
     else:
         types = geo_data[geo_data["Type"].isin(poi_type)]
         purposes = geo_data[geo_data["Purpose"].isin(poi_purpose)]
-        print(types)
-        print(purposes)
+        logging.info(f"--> Поиск точек интереса")
 
-    filtered_houses = set(zip(types["Type"], purposes["Purpose"]))
-
+    filtered_houses = set(purposes["Purpose"])
+    print("filtered_houses", filtered_houses)
     # Фильтрация строк, где (Type, Purpose) содержатся в filtered_houses
-    filtered_rows = geo_data[geo_data.apply(lambda row: (row['Type'], row['Purpose']) in filtered_houses, axis=1)]
+    filtered_rows = geo_data[geo_data.apply(lambda row: (row['Purpose']) in filtered_houses, axis=1)]
+    print("filtered_rows", filtered_rows)
     if place_type == PlaceType.home:
         logging.info(f"--> Найдены жилые дома")
     else:
