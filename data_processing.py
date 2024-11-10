@@ -39,28 +39,6 @@ def check_apartements_count(houses: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return houses
 
 
-def filter_places(geo_data: gpd.GeoDataFrame, place_type: PlaceType) ->  gpd.GeoDataFrame:
-    """Фильтрация строк для нахождения входных\выходных мест в маршрутах"""
-    if place_type == PlaceType.home:
-        types = geo_data[geo_data["Type"].isin(home_type)]
-        purposes = geo_data[geo_data["Purpose"].isin(home_purpose)]
-        logging.info(f"--> Поиск жилых домов")
-    else:
-        types = geo_data[geo_data["Type"].isin(poi_type)]
-        purposes = geo_data[geo_data["Purpose"].isin(poi_purpose)]
-        logging.info(f"--> Поиск точек интереса")
-
-    filtered_houses = set(purposes["Purpose"])
-    print("filtered_houses", filtered_houses)
-    # Фильтрация строк, где (Type, Purpose) содержатся в filtered_houses
-    filtered_rows = geo_data[geo_data.apply(lambda row: (row['Purpose']) in filtered_houses, axis=1)]
-    print("filtered_rows", filtered_rows)
-    if place_type == PlaceType.home:
-        logging.info(f"--> Найдены жилые дома")
-    else:
-        logging.info(f"--> Найдены точки интереса")
-    return filtered_rows
-
 # Функция для расчета количества людей в одной квартире
 def calculate_people_in_apartment(mean=2, std_dev=1):
     """
@@ -123,98 +101,7 @@ def calculate_population(houses, mean=2, std_dev=1):
     
     return houses
 
-# Функция для генерации маршрута для человека
-def generate_route(person_type, is_child=False, mean=1, std_dev=0.2):
-    """
-    Генерирует случайный маршрут для человека, исходя из его типа.
-    - person_type: тип человека ('взрослый', 'школьник', 'маленький ребенок', 'пенсионер')
-    - is_child: если это ребенок, то определяет, идет ли он в детский сад
-    - routes: доступные маршруты
-    - mean и std_dev: параметры нормального распределения для случайного выбора
-    """
-    # if person_type == 'маленький ребенок':
-    #     # Маленькие дети идут в детский сад, и их должен кто-то вести
-    #     route = random.choice(['Дошкольные', 'Метро', 'Остановка'])
-    # el
-    if person_type == 'школьник':
-        # Школьники могут идти в школу или к метро, либо на остановку
-        route = random.choice(routes)  # Выбираем случайный маршрут
-    elif person_type == 'взрослый':
-        # Взрослые могут использовать разные маршруты
-        route = random.choice(routes)  # Выбираем случайный маршрут
-    else:
-        route = random.choice(routes)
 
-    return route
 
-# Функция для распределения людей по категориям с учетом их типа и направления
-def assign_routes_to_house(house, routes, mean=1, std_dev=0.2):
-    """
-    Распределяет людей по маршрутам в зависимости от их типа (взрослый, школьник, маленький ребенок, пенсионер)
-    Параметры:
-    - house: строка из датафрейма с данными о доме
-    - routes: доступные маршруты
-    - mean, std_dev: параметры нормального распределения
-    Возвращает:
-    - Словарь с маршрутом для каждого человека
-    """
-    assigned_routes = []  # Список маршрутов для всех людей в доме
-    
-    # Получаем количество квартир и общее количество людей в доме
-    total_people = house['Total_People']
-    
-    # Распределение людей по категориям
-    child_percent = 0.15  # 15% детей и пенсионеров
-    adult_personal_transport_percent = 0.30  # 30% взрослых с личным транспортом
-    adult_public_transport_percent = 0.45  # 45% взрослых с общественным транспортом
-    adult_car_sharing_percent = 0.10  # 10% взрослых, использующих каршеринг
-    
-    # Количество людей по категориям
-    children_and_seniors_count = int(total_people * child_percent)
-    adults_personal_transport_count = int(total_people * adult_personal_transport_percent)
-    adults_public_transport_count = int(total_people * adult_public_transport_percent)
-    adults_car_sharing_count = int(total_people * adult_car_sharing_percent)
-    
-    # Генерация маршрутов для детей (маленькие дети идут в детский сад, а взрослые ведут их)
-    for _ in range(children_and_seniors_count // 2):  # Каждого ребенка ведет взрослый
-        assigned_routes.append(generate_route('маленький ребенок', routes))
-        assigned_routes.append(generate_route('взрослый', routes))  # Взрослый ведет ребенка
-    
-    # Генерация маршрутов для школьников
-    for _ in range(children_and_seniors_count % 2):  # Остальные дети могут быть школьниками
-        assigned_routes.append(generate_route('школьник', routes))
-    
-    # Генерация маршрутов для взрослых с личным транспортом
-    for _ in range(adults_personal_transport_count):
-        assigned_routes.append(generate_route('взрослый', routes))
-    
-    # Генерация маршрутов для взрослых с общественным транспортом
-    for _ in range(adults_public_transport_count):
-        assigned_routes.append(generate_route('взрослый', routes))
-    
-    # Генерация маршрутов для взрослых с каршерингом
-    for _ in range(adults_car_sharing_count):
-        assigned_routes.append(generate_route('взрослый', routes))
-    
-    return assigned_routes
 
-# Основная функция для распределения маршрутов по всем домам
-def assign_routes_to_all_houses(houses, mean=1, std_dev=0.2):
-    """
-    Применяет функцию распределения маршрутов для всех домов в датафрейме houses
-    Параметры:
-    - houses: GeoDataFrame с данными о домах
-    - routes: список маршрутов
-    - mean, std_dev: параметры нормального распределения
-    Возвращает:
-    - GeoDataFrame с новыми столбцами для маршрутов
-    """
-    # Проверка наличия столбца 'Total_People'
-    if 'Total_People' in houses.columns:
-        # Применяем расчет для всех домов
-        houses['Assigned_Routes'] = houses.apply(lambda row: assign_routes_to_house(row, routes, mean, std_dev), axis=1)
-    else:
-        print("В данных отсутствует столбец 'Total_People'.")
-    
-    return houses
 
