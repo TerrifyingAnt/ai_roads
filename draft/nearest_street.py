@@ -10,7 +10,7 @@ from collections import defaultdict
 import heapq
 import warnings
 import progressbar
-import networkx as nx
+import numpy as np
 
 warnings.simplefilter(action='ignore')
 
@@ -214,4 +214,4 @@ def find_shortest_path_to_poi(graph: nx.Graph, start_point: Point, route_name: s
     
     # Возвращаем кратчайший путь
     return [(shortest_path[i], shortest_path[i + 1]) for i in range(len(shortest_path) - 1)]
- 
+

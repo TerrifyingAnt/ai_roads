@@ -3,7 +3,7 @@ from data_processing import filter_places, calculate_population, assign_routes_t
 import logging
 import time
 from utils.poi_type import PlaceType
-from nearest_street import create_graph, find_shortest_path, process_routes
+from draft.nearest_street import create_graph, find_shortest_path, process_routes
 
 
 logging.basicConfig(level=logging.INFO)
